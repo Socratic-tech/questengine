@@ -2,200 +2,110 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>The Aethelgard Saga</title>
+    <title>Aethelgard: The Hero's Journey</title>
     <style>
-        body { background: #000; color: #55FF55; font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; }
+        body { background: #0c0c0c; color: #55FF55; font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; }
         #game-container { width: 90%; max-width: 900px; padding: 20px; }
-        #display { height: 500px; overflow-y: auto; border: 2px solid #555; padding: 20px; margin-bottom: 15px; background: #000; line-height: 1.6; }
-        #input-area { display: flex; align-items: center; font-size: 1.2rem; border-top: 1px solid #333; padding-top: 10px; }
+        #display { height: 550px; overflow-y: auto; border: 2px solid #444; padding: 20px; background: #000; line-height: 1.6; box-shadow: 0 0 20px #222; }
+        #input-area { display: flex; align-items: center; padding: 15px 0; border-top: 1px solid #333; }
         #cmd-input { background: transparent; border: none; color: #FFFF55; font-family: inherit; font-size: 1.2rem; width: 100%; outline: none; margin-left: 10px; }
-        .room-title { color: #FF55FF; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #555; display: block; margin-bottom: 10px; }
+        .room-title { color: #FF55FF; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #444; display: block; margin-bottom: 10px; }
         .user-cmd { color: #FFFF55; margin: 10px 0; font-weight: bold; }
-        .death { color: #FF5555; font-weight: bold; border: 1px solid #FF5555; padding: 10px; text-align: center; }
-        .win { color: #55FFFF; font-weight: bold; text-align: center; font-size: 1.5rem; }
+        .hint { color: #55FFFF; font-size: 0.9rem; font-style: italic; }
+        .win { color: #FFF; background: #005500; padding: 20px; text-align: center; font-size: 1.5rem; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
     <div id="display"></div>
-    <div id="input-area">
-        <span>></span>
-        <input type="text" id="cmd-input" autofocus autocomplete="off">
-    </div>
+    <div id="input-area"><span>></span><input type="text" id="cmd-input" autofocus autocomplete="off"></div>
 </div>
 
 <script>
 /** 1. THE GAME STATE **/
-let gameState = {
-    currentRoom: "forest_start",
-    inventory: [],
-    flags: {
-        bridge_fixed: false,
-        beggar_fed: false,
-        dragon_asleep: false,
-        gate_unlocked: false,
-        is_dead: false
-    }
+let state = {
+    current: "forest_edge",
+    inv: [],
+    flags: {},
+    steps: 0
 };
 
-/** 2. THE EXPANDED WORLD (20+ STEPS) **/
+/** 2. THE 20-STEP WORLD DATA **/
 const world = {
-    // ACT I: THE OUTSKIRTS
-    "forest_start": {
-        "title": "Edge of the Whispering Woods",
-        "desc": () => "The air is cold. To the NORTH is a stone bridge. To the WEST, a merchant's wagon sits abandoned.",
-        "exits": { "north": "bridge_ravine", "west": "merchant_wagon" },
-        "items": ["coin"]
-    },
-    "merchant_wagon": {
-        "title": "Abandoned Wagon",
-        "desc": () => "The wagon is empty except for a **hammer** left in the dirt. You can head EAST.",
-        "exits": { "east": "forest_start" },
-        "items": ["hammer"]
-    },
-    "bridge_ravine": {
-        "title": "The Broken Bridge",
-        "desc": () => gameState.flags.bridge_fixed ? "The bridge is repaired. You can go NORTH to the Village." : "A massive gap blocks the way NORTH. You need to repair the bridge stones. You can go SOUTH.",
-        "exits": { "south": "forest_start", "north": "village_entrance" },
-        "condition": (dir) => (dir === "north" && !gameState.flags.bridge_fixed) ? "The bridge is broken. You'd fall to your death!" : null,
-        "interactions": { "hammer": { "flag": "bridge_fixed", "msg": "You hammer the stones into place. The bridge is sturdy!" } }
-    },
-
-    // ACT II: THE VILLAGE
-    "village_entrance": {
-        "title": "Village of Oakhaven",
-        "desc": () => "A humble village. A hungry **beggar** sits by a fountain. Paths lead NORTH to the mountains and WEST to a Bakery.",
-        "exits": { "south": "bridge_ravine", "north": "mountain_base", "west": "bakery" },
-        "items": []
-    },
-    "bakery": {
-        "title": "The Bakery",
-        "desc": () => "The smell of fresh bread is divine. You could buy **bread** if you had a coin. You can go EAST.",
-        "exits": { "east": "village_entrance" },
-        "interactions": { "coin": { "get_item": "bread", "msg": "You trade your coin for a warm loaf of bread." } }
-    },
-    "mountain_base": {
-        "title": "Base of Mount Krag",
-        "desc": () => "The path gets steep. A large **boulder** blocks a cave to the EAST. The path continues NORTH to the castle.",
-        "exits": { "south": "village_entrance", "north": "castle_gates", "east": "dark_cave" },
-        "condition": (dir) => (dir === "east" && !gameState.flags.beggar_fed) ? "The boulder is too heavy to move alone. Maybe someone in town can help?" : null,
-        "items": []
-    },
-
-    // ACT III: THE BRANCHING PATHS
-    "dark_cave": {
-        "title": "The Smuggler's Cave",
-        "desc": () => "It's dark. You find a **rope** hidden here. You can go WEST.",
-        "exits": { "west": "mountain_base" },
-        "items": ["rope"]
-    },
-    "castle_gates": {
-        "title": "Castle Aethelgard Gates",
-        "desc": () => "Two massive guards block the way NORTH. They look bored. You can go SOUTH.",
-        "exits": { "south": "mountain_base", "north": "throne_room" },
-        "condition": (dir) => (dir === "north" && !gameState.flags.gate_unlocked) ? "The guards cross their halberds. 'No entry without the King's Seal!'" : null,
-        "interactions": {
-            "bread": { "flag": "beggar_fed", "msg": "Wait, you give the bread to the beggar instead? He tells you a secret: 'The guards love music!'" },
-            "flute": { "flag": "gate_unlocked", "msg": "You play a beautiful melody. The guards fall asleep, leaving the gate open!" }
-        }
-    },
-
-    // ACT IV: THE CLIMAX
-    "throne_room": {
-        "title": "The Throne Room",
-        "desc": () => "The King sits before you. 'To prove your worth, you must bring me the **Crown** from the peaks!' NORTH to peaks.",
-        "exits": { "south": "castle_gates", "north": "mountain_peaks" },
-        "items": ["flute"] // You find this in the castle
-    },
-    "mountain_peaks": {
-        "title": "The Icy Peaks",
-        "desc": () => "The **crown** is on a high ledge. You'll need something to reach it. Path leads SOUTH.",
-        "exits": { "south": "throne_room" },
-        "interactions": {
-            "rope": { "get_item": "crown", "msg": "You lasso the ledge and climb up to grab the Golden Crown!" }
-        }
-    },
-    "victory": {
-        "title": "The King's Blessing",
-        "desc": () => "You return the crown. The King knights you on the spot! YOU ARE THE HERO OF AETHELGARD!",
-        "exits": {},
-        "win": true
-    }
+    "forest_edge": { title: "Step 1: Forest Edge", desc: "A path leads NORTH. A glinting **coin** lies in the dirt.", exits: { north: "river_crossing" }, items: ["coin"] },
+    "river_crossing": { title: "Step 2: River Crossing", desc: "A wide river. A ferryman waits. He wants a 'gift'. Path leads NORTH.", exits: { north: "village_square", south: "forest_edge" }, condition: (d) => (d === "north" && !state.flags.paid_ferry) ? "The ferryman blocks your way." : null, interactions: { coin: { flag: "paid_ferry", msg: "The ferryman takes your coin and rows you across." } } },
+    "village_square": { title: "Step 3: Village Square", desc: "A bustling square. A shop sits to the WEST. The main road leads NORTH.", exits: { west: "general_store", north: "muddy_swamp", south: "river_crossing" }, items: [] },
+    "general_store": { title: "Step 4: General Store", desc: "Shelves of gear. A **map** is pinned to the wall. Return EAST.", exits: { east: "village_square" }, items: ["map"] },
+    "muddy_swamp": { title: "Step 5: Muddy Swamp", desc: "Thick fog. Without a 'map', you'll get lost. The path continues NORTH.", exits: { north: "ancient_ruins", south: "village_square" }, condition: (d) => (d === "north" && !state.inv.includes("map")) ? "You wander in circles and end up back here." : null },
+    "ancient_ruins": { title: "Step 6: Ancient Ruins", desc: "Crumbling pillars. A **stone_key** is wedged in a crack. Path leads NORTH.", exits: { north: "temple_entrance", south: "muddy_swamp" }, items: ["stone_key"] },
+    "temple_entrance": { title: "Step 7: Temple Entrance", desc: "A massive stone door with a keyhole. It leads NORTH.", exits: { north: "inner_sanctum", south: "ancient_ruins" }, condition: (d) => (d === "north" && !state.flags.temple_open) ? "The door is locked." : null, interactions: { stone_key: { flag: "temple_open", msg: "The key turns with a heavy thud. The door creaks open." } } },
+    "inner_sanctum": { title: "Step 8: Inner Sanctum", desc: "An altar holds an **unlit_torch**. A staircase leads NORTH.", exits: { north: "mountain_pass", south: "temple_entrance" }, items: ["torch"] },
+    "mountain_pass": { title: "Step 9: Mountain Pass", desc: "A campfire burns here. You could light something. Path leads NORTH.", exits: { north: "dark_tunnel", south: "inner_sanctum" }, interactions: { torch: { flag: "torch_lit", msg: "You light the torch. It burns brightly." } } },
+    "dark_tunnel": { title: "Step 10: Dark Tunnel", desc: "Pitch black. You need light to see the path NORTH.", exits: { north: "valley_floor", south: "mountain_pass" }, condition: (d) => (d === "north" && !state.flags.torch_lit) ? "It's too dark to see. You're afraid of falling." : null },
+    "valley_floor": { title: "Step 11: Valley Floor", desc: "A lush valley. A **rope** is snagged on a tree. Path leads NORTH.", exits: { north: "cliff_side", south: "dark_tunnel" }, items: ["rope"] },
+    "cliff_side": { title: "Step 12: Cliff Side", desc: "A vertical wall. You need a way to climb NORTH.", exits: { north: "castle_outer", south: "valley_floor" }, condition: (d) => (d === "north" && !state.inv.includes("rope")) ? "The cliff is too steep to climb." : null },
+    "castle_outer": { title: "Step 13: Castle Outer Wall", desc: "The wall is cracked. A **crowbar** lies nearby. A hole leads NORTH.", exits: { north: "castle_kitchen", south: "cliff_side" }, items: ["crowbar"] },
+    "castle_kitchen": { title: "Step 14: Castle Kitchen", desc: "Smells of stew. A locked pantry is to the WEST. Exit NORTH.", exits: { west: "pantry", north: "great_hall", south: "castle_outer" }, items: [] },
+    "pantry": { title: "Step 15: Pantry", desc: "You use the crowbar to pry it open. Inside is a **silver_platter**. Return EAST.", exits: { east: "castle_kitchen" }, items: ["platter"] },
+    "great_hall": { title: "Step 16: Great Hall", desc: "The guards won't let you through NORTH unless you look like a servant.", exits: { north: "library", south: "castle_kitchen" }, condition: (d) => (d === "north" && !state.inv.includes("platter")) ? "The guards growl: 'Back to work, peasant!'" : null },
+    "library": { title: "Step 17: Library", desc: "Dusty books. A **scroll** sits on a desk. Path leads NORTH.", exits: { north: "alchemist_lab", south: "great_hall" }, items: ["scroll"] },
+    "alchemist_lab": { title: "Step 18: Alchemist Lab", desc: "Bubbling beakers. You need to 'use scroll' to reveal the NORTH path.", exits: { north: "throne_corridor", south: "library" }, condition: (d) => (d === "north" && !state.flags.path_revealed) ? "A brick wall blocks the way." : null, interactions: { scroll: { flag: "path_revealed", msg: "The scroll reveals a secret door in the bricks!" } } },
+    "throne_corridor": { title: "Step 19: Throne Corridor", desc: "The final stretch. The King's door is NORTH.", exits: { north: "throne_room", south: "alchemist_lab" }, items: [] },
+    "throne_room": { title: "Step 20: The Throne Room", desc: "The King smiles. 'You have completed the journey!'", exits: {}, win: true }
 };
 
-/** 3. THE ENGINE LOGIC **/
+/** 3. THE ENGINE **/
 const display = document.getElementById('display');
 const inputField = document.getElementById('cmd-input');
 
-function print(text, className = "") {
+function print(text, cls = "") {
     const p = document.createElement('p');
-    if (className) p.className = className;
+    if (cls) p.className = cls;
     p.innerHTML = text;
     display.appendChild(p);
     display.scrollTop = display.scrollHeight;
 }
 
-function renderScene() {
-    if (gameState.is_dead) return;
-    const room = world[gameState.currentRoom];
+function render() {
+    const room = world[state.current];
+    if (room.win) { print(`<div class="win">${room.title}<br>${room.desc()}</div>`); return; }
     print(`<span class="room-title">${room.title}</span>`);
     print(room.desc());
-    if (room.items.length > 0) print(`Visible items: ${room.items.join(", ")}`, "system-msg");
-    print(`Exits: ${Object.keys(room.exits).join(", ").toUpperCase()}`, "system-msg");
+    if (room.items?.length) print(`Items: ${room.items.join(", ")}`, "hint");
+    print(`Exits: ${Object.keys(room.exits).join(", ").toUpperCase()}`, "hint");
 }
 
-function handleInput(input) {
-    if (gameState.is_dead) return;
-    const parts = input.toLowerCase().trim().split(" ");
-    const verb = parts[0];
-    const noun = parts[parts.length - 1];
-    const room = world[gameState.currentRoom];
-
+function handle(input) {
+    const p = input.toLowerCase().trim().split(" ");
+    const verb = p[0], noun = p[p.length - 1], room = world[state.current];
     print(`> ${input}`, "user-cmd");
 
-    if (verb === "go" || Object.keys(room.exits).includes(verb)) {
+    if (verb === "go" || verb === "move" || Object.keys(room.exits).includes(verb)) {
         const dir = Object.keys(room.exits).includes(verb) ? verb : noun;
         if (room.exits[dir]) {
-            const error = room.condition ? room.condition(dir) : null;
-            if (error) { print(error); } 
-            else { 
-                gameState.currentRoom = room.exits[dir]; 
-                if (world[gameState.currentRoom].win) {
-                    print(world[gameState.currentRoom].desc(), "win");
-                    gameState.is_dead = true;
-                } else {
-                    renderScene();
-                }
-            }
-        } else { print("You can't go that way."); }
-    } 
-    else if (verb === "take" || verb === "get") {
-        if (room.items.includes(noun)) {
-            gameState.inventory.push(noun);
+            const err = room.condition ? room.condition(dir) : null;
+            if (err) print(err);
+            else { state.current = room.exits[dir]; render(); }
+        } else print("Dead end.");
+    } else if (verb === "take") {
+        if (room.items?.includes(noun)) {
+            state.inv.push(noun);
             room.items = room.items.filter(i => i !== noun);
-            print(`Taken: ${noun}.`);
-        } else { print("That isn't here."); }
-    } 
-    else if (verb === "use") {
-        if (!gameState.inventory.includes(noun)) { print(`You don't have a ${noun}.`); }
-        else if (room.interactions && room.interactions[noun]) {
-            const action = room.interactions[noun];
-            if (action.flag) gameState.flags[action.flag] = true;
-            if (action.get_item) gameState.inventory.push(action.get_item);
-            print(action.msg);
-            renderScene();
-        } else { print("Nothing happened."); }
-    }
-    else if (verb === "inv") { print("Inventory: " + (gameState.inventory.length ? gameState.inventory.join(", ") : "Empty")); }
-    else if (verb === "restart") { location.reload(); }
+            print(`Taken: ${noun}`);
+        } else print("Nothing to take.");
+    } else if (verb === "use") {
+        if (state.inv.includes(noun) && room.interactions?.[noun]) {
+            const act = room.interactions[noun];
+            if (act.flag) state.flags[act.flag] = true;
+            print(act.msg);
+            render();
+        } else print("Nothing happens.");
+    } else if (verb === "inv") print("Items: " + (state.inv.join(", ") || "None"));
 }
 
-inputField.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { handleInput(inputField.value); inputField.value = ''; }
-});
-
-renderScene();
+inputField.addEventListener('keydown', (e) => { if (e.key === 'Enter') { handle(inputField.value); inputField.value = ''; } });
+render();
 </script>
 </body>
 </html>
