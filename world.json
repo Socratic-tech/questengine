@@ -1,0 +1,41 @@
+{
+  "start_room": "forest_clearing",
+  "game_flags": {
+    "troll_bribed": false,
+    "gate_unlocked": false
+  },
+  "rooms": {
+    "forest_clearing": {
+      "description": "You are in a lush clearing. A path leads North to a bridge and East to a dark cave.",
+      "exits": {
+        "north": "stone_bridge",
+        "east": "dragon_cave"
+      },
+      "items": ["small_key"]
+    },
+    "stone_bridge": {
+      "description": "A sturdy stone bridge. A grumpy troll stands here, blocking the North path.",
+      "exits": {
+        "south": "forest_clearing",
+        "north": {
+          "target": "castle_entrance",
+          "required_flag": "troll_bribed",
+          "fail_msg": "The troll growls: 'No one crosses without a gift!'"
+        }
+      },
+      "interactions": {
+        "give_coin": {
+          "item_required": "gold_coin",
+          "set_flag": "troll_bribed",
+          "success_msg": "The troll happily takes the coin and steps aside.",
+          "fail_msg": "You have nothing the troll wants."
+        }
+      }
+    },
+    "dragon_cave": {
+      "description": "It's dark. A sleeping dragon lies atop a pile of gold.",
+      "exits": { "west": "forest_clearing" },
+      "items": ["gold_coin"]
+    }
+  }
+}
