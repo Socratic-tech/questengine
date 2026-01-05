@@ -2,25 +2,24 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Aethelgard Quest Engine</title>
+    <title>The Chronicles of Aethelgard</title>
     <style>
-        /* Classic EGA/CGA Palette */
         body { background: #000; color: #55FF55; font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; }
         #game-container { width: 90%; max-width: 800px; padding: 20px; }
-        #display { height: 450px; overflow-y: auto; border: 2px solid #555; padding: 15px; margin-bottom: 10px; background: #000; line-height: 1.4; }
+        #display { height: 450px; overflow-y: auto; border: 2px solid #555; padding: 15px; margin-bottom: 10px; background: #000; line-height: 1.5; }
         #input-area { display: flex; align-items: center; font-size: 1.2rem; }
         #cmd-input { background: transparent; border: none; color: #FFFF55; font-family: inherit; font-size: 1.2rem; width: 100%; outline: none; margin-left: 10px; }
-        .room-title { color: #FF55FF; font-weight: bold; text-decoration: underline; margin-bottom: 10px; display: block; }
-        .user-cmd { color: #FFFF55; margin: 10px 0; }
-        .options { color: #55FFFF; margin-top: 10px; font-style: italic; }
+        .room-title { color: #FF55FF; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 5px; }
+        .user-cmd { color: #FFFF55; margin: 10px 0; font-weight: bold; }
+        .system-msg { color: #AAA; font-style: italic; }
+        .death { color: #FF5555; font-weight: bold; }
+        .win { color: #55FFFF; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div id="display">
-        <p>Loading Aethelgard Engine...</p>
-    </div>
+    <div id="display"></div>
     <div id="input-area">
         <span>></span>
         <input type="text" id="cmd-input" autofocus autocomplete="off">
@@ -28,106 +27,157 @@
 </div>
 
 <script>
-/** 1. THE WORLD DATA **/
-const gameData = {
-    "start_room": "forest_edge",
-    "rooms": {
-        "forest_edge": {
-            "title": "The Whispering Woods",
-            "description": "You stand at the edge of a violet-misted forest. To the North, a dark castle looms. A path leads East into a thicket.",
-            "exits": { "north": "castle_gate", "east": "thicket" },
-            "items": ["old_coin"]
-        },
-        "castle_gate": {
-            "title": "The Iron Gate",
-            "description": "A massive portcullis blocks your path. A stone guard stands perfectly still. You can head South to return to the forest.",
-            "exits": { "south": "forest_edge" },
-            "items": []
-        },
-        "thicket": {
-            "title": "The Dense Thicket",
-            "description": "The trees are so thick you can barely see. A strange thumping comes from the West path.",
-            "exits": { "west": "forest_edge" },
-            "items": ["sturdy_stick"]
-        }
+/** 1. THE GAME STATE & WORLD **/
+let gameState = {
+    currentRoom: "crossroads",
+    inventory: [],
+    flags: {
+        bridgeFixed: false,
+        guardDistracted: false,
+        hasGem: false
     }
 };
 
-/** 2. THE ENGINE LOGIC **/
-let currentRoom = gameData.start_room;
-let inventory = [];
-
-// This ensures the script waits for the page to load
-window.onload = () => {
-    const display = document.getElementById('display');
-    const inputField = document.getElementById('cmd-input');
-
-    function print(text, className = "") {
-        const p = document.createElement('p');
-        if (className) p.className = className;
-        p.innerHTML = text;
-        display.appendChild(p);
-        display.scrollTop = display.scrollHeight;
-    }
-
-    function renderRoom() {
-        const room = gameData.rooms[currentRoom];
-        display.innerHTML = ""; // Clear screen like a new scene
-        print(room.title, "room-title");
-        print(room.description);
-        
-        if (room.items.length > 0) {
-            print(`You see: ${room.items.join(", ")}`);
-        }
-
-        // Show available directions clearly
-        const directions = Object.keys(room.exits).join(", ").toUpperCase();
-        print(`Available Paths: ${directions}`, "options");
-    }
-
-    function processCommand(input) {
-        const parts = input.toLowerCase().trim().split(" ");
-        const verb = parts[0];
-        const noun = parts[parts.length - 1];
-        const room = gameData.rooms[currentRoom];
-
-        print(`> ${input}`, "user-cmd");
-
-        if (verb === "go" || verb === "move" || Object.keys(room.exits).includes(verb)) {
-            const dir = Object.keys(room.exits).includes(verb) ? verb : noun;
-            if (room.exits[dir]) {
-                currentRoom = room.exits[dir];
-                renderRoom();
-            } else {
-                print("You can't go that way.");
+const world = {
+    "crossroads": {
+        "title": "The Ancient Crossroads",
+        "description": () => "You stand at a three-way split. To the NORTH is a broken stone bridge. To the EAST is a dark, smelly cave. To the WEST is a merchant's wagon.",
+        "exits": { 
+            "north": "bridge_pass", 
+            "east": "cave", 
+            "west": "wagon" 
+        },
+        "items": []
+    },
+    "wagon": {
+        "title": "Merchant's Wagon",
+        "description": () => "The merchant is gone, but a **heavy_hammer** lies in the dirt. You can go back EAST.",
+        "exits": { "east": "crossroads" },
+        "items": ["hammer"]
+    },
+    "bridge_pass": {
+        "title": "The Great Ravine",
+        "description": () => gameState.flags.bridgeFixed 
+            ? "The bridge is now sturdy. The path to the NORTH leads to the Wizard's Tower." 
+            : "A massive gap prevents you from crossing. The bridge stones lie scattered. You can go SOUTH.",
+        "exits": { 
+            "south": "crossroads",
+            "north": "wizard_tower" 
+        },
+        "condition": (dir) => {
+            if (dir === "north" && !gameState.flags.bridgeFixed) {
+                return "The bridge is broken! You cannot cross.";
             }
-        } else if (verb === "take" || verb === "get") {
-            if (room.items.includes(noun)) {
-                inventory.push(noun);
-                room.items = room.items.filter(i => i !== noun);
-                print(`You picked up the ${noun}.`);
-            } else {
-                print("That isn't here.");
+            return null;
+        },
+        "interactions": {
+            "hammer": {
+                "flag": "bridgeFixed",
+                "msg": "You spend an hour pounding the stones back into place. The bridge is fixed!"
             }
-        } else if (verb === "inv" || verb === "inventory") {
-            print("Inventory: " + (inventory.length ? inventory.join(", ") : "Empty"));
+        },
+        "items": []
+    },
+    "cave": {
+        "title": "The Dragon's Den",
+        "description": () => "It's pitch black, but you see a **glowing_gem** near a sleeping dragon. You can sneak WEST.",
+        "exits": { "west": "crossroads" },
+        "items": ["gem"]
+    },
+    "wizard_tower": {
+        "title": "The Wizard's Tower",
+        "description": () => "A shimmering portal stands before you. If you have the gem, you could 'USE GEM' to win the game.",
+        "exits": { "south": "bridge_pass" },
+        "interactions": {
+            "gem": {
+                "win": true,
+                "msg": "You place the gem into the portal. Light engulfs you! YOU HAVE WON!"
+            }
+        },
+        "items": []
+    }
+};
+
+/** 2. THE ENGINE **/
+const display = document.getElementById('display');
+const inputField = document.getElementById('cmd-input');
+
+function print(text, className = "") {
+    const p = document.createElement('p');
+    if (className) p.className = className;
+    p.innerHTML = text;
+    display.appendChild(p);
+    display.scrollTop = display.scrollHeight;
+}
+
+function renderScene() {
+    const room = world[gameState.currentRoom];
+    print(room.title, "room-title");
+    print(room.description());
+    if (room.items.length > 0) {
+        print(`Items here: ${room.items.join(", ")}`, "system-msg");
+    }
+}
+
+function handleInput(input) {
+    const parts = input.toLowerCase().trim().split(" ");
+    const verb = parts[0];
+    const noun = parts[parts.length - 1];
+    const room = world[gameState.currentRoom];
+
+    print(`> ${input}`, "user-cmd");
+
+    // Command Logic
+    if (verb === "go" || verb === "move" || ["north", "south", "east", "west"].includes(verb)) {
+        const dir = ["north", "south", "east", "west"].includes(verb) ? verb : noun;
+        if (room.exits[dir]) {
+            // Check for conditions
+            const error = room.condition ? room.condition(dir) : null;
+            if (error) {
+                print(error);
+            } else {
+                gameState.currentRoom = room.exits[dir];
+                renderScene();
+            }
         } else {
-            print(`I don't know how to '${verb}'. Try 'GO NORTH' or 'TAKE COIN'.`);
+            print("You can't go that way.");
+        }
+    } 
+    else if (verb === "take" || verb === "get") {
+        if (room.items.includes(noun)) {
+            gameState.inventory.push(noun);
+            room.items = room.items.filter(i => i !== noun);
+            print(`You took the ${noun}.`);
+        } else {
+            print("Nothing here by that name.");
+        }
+    } 
+    else if (verb === "use") {
+        if (!gameState.inventory.includes(noun)) {
+            print(`You don't have a ${noun}.`);
+        } else if (room.interactions && room.interactions[noun]) {
+            const action = room.interactions[noun];
+            if (action.flag) gameState.flags[action.flag] = true;
+            print(action.msg);
+            if (action.win) print("GAME OVER - YOU WIN!", "win");
+        } else {
+            print("Nothing happened.");
         }
     }
+    else if (verb === "inv") {
+        print("Inventory: " + (gameState.inventory.length ? gameState.inventory.join(", ") : "Empty"));
+    }
+}
 
-    // Input listener
-    inputField.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const val = inputField.value;
-            inputField.value = '';
-            processCommand(val);
-        }
-    });
+inputField.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        handleInput(inputField.value);
+        inputField.value = '';
+    }
+});
 
-    // Start the game
-    renderRoom();
-};
+// Start Game
+renderScene();
 </script>
 </body>
 </html>
