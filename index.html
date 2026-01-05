@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Aethelgard Adventure</title>
+    <style>
+        body { background: #000; color: #0f0; font-family: monospace; padding: 20px; }
+        #output { height: 300px; overflow-y: auto; border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
+        input { background: #000; color: #0f0; border: none; border-bottom: 1px solid #0f0; width: 80%; outline: none; }
+    </style>
+</head>
+<body>
+    <div id="output"></div>
+    <span>> </span><input type="text" id="input" autofocus>
+
+    <script>
+        // This would eventually be loaded from your world.json
+        const world = {
+            "forest": { "desc": "You are in a dark forest. A path leads North.", "exits": {"north": "castle"} },
+            "castle": { "desc": "The castle gates are locked.", "exits": {"south": "forest"} }
+        };
+
+        let currentRoom = "forest";
+        const output = document.getElementById('output');
+        const input = document.getElementById('input');
+
+        function print(text) {
+            output.innerHTML += `<p>${text}</p>`;
+            output.scrollTop = output.scrollHeight;
+        }
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const cmd = input.value.toLowerCase().split(' ');
+                input.value = '';
+                
+                if (cmd[0] === 'go') {
+                    const dir = cmd[1];
+                    if (world[currentRoom].exits[dir]) {
+                        currentRoom = world[currentRoom].exits[dir];
+                        print(world[currentRoom].desc);
+                    } else {
+                        print("You can't go that way.");
+                    }
+                }
+            }
+        });
+
+        print(world[currentRoom].desc);
+    </script>
+</body>
+</html>
