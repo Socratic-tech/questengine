@@ -3,31 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aethelgard: Shadow of the Sun</title>
+    <title>Aethelgard: The Complete Saga</title>
     <style>
         :root { 
             --cga-blue: #0000AA; --cga-cyan: #55FFFF; --cga-white: #FFFFFF; 
             --cga-magenta: #FF55FF; --cga-yellow: #FFFF55; --cga-red: #FF5555;
-            --crt-green: #00FF41;
         }
         body { background: #000; color: var(--cga-white); font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; overflow: hidden; }
-        #game-container { width: 100%; max-width: 900px; height: 100vh; display: flex; flex-direction: column; border-left: 2px solid #333; border-right: 2px solid #333; box-shadow: 0 0 20px rgba(85, 255, 255, 0.1); }
-        
+        #game-container { width: 100%; max-width: 900px; height: 100vh; display: flex; flex-direction: column; border-left: 2px solid #333; border-right: 2px solid #333; }
         #status-bar { background: var(--cga-blue); color: var(--cga-white); padding: 8px 20px; display: flex; justify-content: space-between; border-bottom: 2px solid var(--cga-white); font-size: 0.8rem; }
-        
-        /* Art Portrait Area */
-        #art-display { background: #000; color: var(--crt-green); padding: 10px; text-align: center; border-bottom: 1px solid #222; white-space: pre; font-size: 0.7rem; line-height: 1.1; height: 160px; overflow: hidden; }
-
-        #display { flex-grow: 1; overflow-y: auto; padding: 20px; line-height: 1.5; background: #050505; scroll-behavior: smooth; }
+        #art-display { background: #000; color: var(--cga-cyan); padding: 10px; text-align: center; border-bottom: 1px solid #222; white-space: pre; font-size: 0.7rem; line-height: 1.1; height: 140px; }
+        #display { flex-grow: 1; overflow-y: auto; padding: 20px; line-height: 1.5; background: #050505; }
         #input-area { background: #111; padding: 15px; border-top: 2px solid var(--cga-white); display: flex; align-items: center; }
         #cmd-input { background: transparent; border: none; color: var(--cga-cyan); font-family: inherit; font-size: 1.1rem; width: 100%; outline: none; margin-left: 10px; }
-        
-        .room-title { color: var(--cga-magenta); font-size: 1.3rem; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; display: block; }
+        .room-title { color: var(--cga-magenta); font-size: 1.3rem; font-weight: bold; text-decoration: underline; display: block; }
         .npc-text { color: var(--cga-yellow); font-style: italic; }
         .npc-name { color: var(--cga-magenta); font-weight: bold; }
-        .user-cmd { color: var(--cga-cyan); font-weight: bold; margin: 12px 0 4px 0; }
-        .sys-note { color: #666; font-size: 0.85rem; font-style: italic; }
-        .flavor-text { color: #444; font-size: 0.8rem; border-left: 2px solid #222; padding-left: 10px; margin: 10px 0; }
+        .user-cmd { color: var(--cga-cyan); font-weight: bold; margin: 10px 0 2px 0; }
+        .flavor-text { color: #555; font-size: 0.85rem; font-style: italic; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -35,150 +28,92 @@
 <div id="game-container">
     <div id="status-bar">
         <span id="stat-loc">Location: ???</span>
-        <span id="stat-turn">Turns: 0</span>
+        <span id="stat-step">Step: 1/20</span>
         <span id="stat-score">Score: 0</span>
     </div>
-
-    <div id="art-display" id="art-box"></div>
-
+    <div id="art-display"></div>
     <div id="display"></div>
-    
     <div id="input-area">
         <span style="color:var(--cga-cyan)">▶</span>
-        <input type="text" id="cmd-input" autofocus placeholder="Type a command...">
+        <input type="text" id="cmd-input" autofocus>
     </div>
 </div>
 
 <script>
-/** 1. GAME STATE **/
-let state = {
-    current: "forest_edge",
-    inv: [],
-    flags: { rats_cleared: false, has_key: false, gate_open: false, bridge_visible: false, game_over: false },
-    score: 0,
-    turns: 0,
-    activeNPC: null
+/** 1. DATA **/
+let state = { current: "forest", inv: [], flags: {}, score: 0, turns: 0, activeNPC: null };
+
+const arts = {
+    nature: "\n   ^  ^  ^   \n  / \\/ \\/ \\  \n /   \\  /  \\ \n/_   _\\/_   _\\\n  | |    | |  ",
+    town: "\n     _L_     \n   _/__\\_    \n  |      |   \n  |  []  |   \n~~|______|~~~",
+    tower: "\n     [|]     \n     | |     \n    /   \\    \n   |     |   \n   |_|_|_|   "
 };
 
-/** 2. ASCII ART ASSETS **/
-const art = {
-    forest: `
-       ^  ^  ^   ^      ^
-      / \\/ \\/ \\ / \\    / \\
-     /   \\  /  \\   \\  /   \\
-    /_   _\\/_   _\\  \\/_   _\\
-      | |    | |      | |
-    `,
-    village: `
-         _L_
-       _/__\\_   /\\
-      |      | |  |
-      |  []  | |__|
-    ~~|______|~~~~~~~
-    `,
-    tavern: `
-      .-------.
-      | [---] |   _
-      |  | |  |  | |
-      |  ' '  |  |_|
-      '-------'  ( )
-    `,
-    mountains: `
-         /\\
-        /  \\  /\\
-       /    \\/  \\
-      /      \\   \\
-     /        \\   \\
-    `,
-    gate: `
-     .----------.
-     |  __  __  |
-     | |  ||  | |
-     | |__||__| |
-     |  _    _  |
-     | | |  | | |
-    `,
-    citadel: `
-        [|]
-        | |
-       /   \\
-      |     |
-      |  _  |
-      |_|_|_|
-    `
-};
-
-/** 3. WORLD DATA **/
 const world = {
-    "forest_edge": {
-        title: "Forest Edge", art: art.forest,
-        desc: () => "Misty pines surround you. " + (world.forest_edge.items.includes("coin") ? "A **coin** glints in the dirt." : ""),
-        exits: { north: "village_square", west: "wagon" },
-        items: ["coin"], hint: "Take the coin, then check the wagon West."
+    "forest": {
+        step: 1, title: "The Forest Edge", art: arts.nature,
+        desc: () => "A misty trailhead. " + (world.forest.items.includes("coin") ? "A shiny **coin** is here." : "") + " WEST to a wagon, NORTH to Oakhaven.",
+        exits: { north: "square", west: "wagon" }, items: ["coin"]
     },
     "wagon": {
-        title: "Ruined Wagon", art: art.forest,
-        desc: () => "A broken merchant cart. " + (world.wagon.items.includes("hammer") ? "A heavy **hammer** is here." : ""),
-        exits: { east: "forest_edge" },
-        items: ["hammer"], hint: "The hammer is useful for clearing paths."
+        step: 2, title: "Ruined Wagon", art: arts.nature,
+        desc: () => "A broken cart. " + (world.wagon.items.includes("hammer") ? "A **hammer** lies in the mud." : ""),
+        exits: { east: "forest" }, items: ["hammer"]
     },
-    "village_square": {
-        title: "Oakhaven Square", art: art.village,
-        desc: "A quiet village. An **Elder** sits by a fountain. NORTH to mountains, WEST to Tavern.",
-        exits: { south: "forest_edge", north: "mountain_pass", west: "tavern" },
-        npcs: { "elder": { name: "Elder Haim", intro: "The sun is dying, traveler.", dialogue: { root: { text: "We need the Sun Gem back.", options: [{text:"I'll find it.", next:"exit"}] } } } }
+    "square": {
+        step: 3, title: "Oakhaven Square", art: arts.town,
+        desc: "The village center. An **Elder** is here. NORTH to mountains, WEST to Tavern.",
+        exits: { south: "forest", north: "pass", west: "tavern" },
+        npcs: { "elder": { name: "Elder Haim", intro: "The Sun Gem is missing...", dialogue: { root: { text: "Malakor took it to the Frozen Peaks. You'll need a Sigil to pass.", options: [{text:"I'll find it.", next:"exit"}] } } } }
     },
-    "mountain_pass": {
-        title: "High Pass", art: art.mountains,
-        desc: () => state.flags.has_key ? "The Blacksmith is back at his forge." : "A **Blacksmith** is searching the ground for his coin.",
-        exits: { south: "village_square", north: "sorcerer_gate" },
-        npcs: { "blacksmith": { name: "Ironheart", intro: "Lost my coin!", dialogue: { root: { text: "No coin, no key!", options: [{text:"I'm looking.", next:"exit"}] } } } },
-        interactions: { "coin": { npc: "blacksmith", msg: "He hands you a **silver_key**!", get: "silver_key", flag: "has_key" } }
+    "pass": {
+        step: 4, title: "The High Pass", art: arts.nature,
+        desc: () => state.flags.has_key ? "The Blacksmith is happy." : "A **Blacksmith** is looking for his coin.",
+        exits: { south: "square", north: "gate" },
+        npcs: { "blacksmith": { name: "Ironheart", intro: "Where is my coin?", dialogue: { root: { text: "Find it and the Silver Key is yours.", options: [{text:"Searching!", next:"exit"}] } } } },
+        interactions: { "coin": { npc: "blacksmith", msg: "He gives you the **silver_key**!", get: "silver_key", flag: "has_key" } }
     },
     "tavern": {
-        title: "The Dragon Tavern", art: art.tavern,
-        desc: "Smoky and warm. A hatch leads DOWN. EAST to square.",
-        exits: { east: "village_square", down: "cellar" },
-        condition: (d) => (d === "down" && !state.inv.includes("silver_key")) ? "It's locked." : null,
-        npcs: { "barman": { name: "Boran", intro: "Check the cellar for my lantern.", dialogue: { root: { text: "Rats are down there.", options: [{text:"Okay.", next:"exit"}] } } } }
+        step: 5, title: "Sleeping Dragon Tavern", art: arts.town,
+        desc: "A warm pub. A hatch leads DOWN. EAST to square.",
+        exits: { east: "square", down: "cellar" },
+        condition: (d) => (d === "down" && !state.inv.includes("silver_key")) ? "Locked." : null,
+        npcs: { "barman": { name: "Boran", intro: "Check the cellar.", dialogue: { root: { text: "The lantern is down there, past the rats.", options: [{text:"On it.", next:"exit"}] } } } }
     },
     "cellar": {
-        title: "Dark Cellar", art: art.tavern,
-        desc: () => state.flags.rats_cleared ? "The rats are gone. A **lantern** is here. Go UP." : "Rats hiss! Use a tool to scare them. Go UP.",
+        step: 6, title: "The Cellar", art: arts.town,
+        desc: () => state.flags.rats ? "The rats are gone. A **lantern** is here." : "Rats block the way! Use a tool. UP to exit.",
         exits: { up: "tavern" },
-        interactions: { "hammer": { flag: "rats_cleared", msg: "You clear the rats and find a **lantern**.", get: "lantern" } }
+        interactions: { "hammer": { flag: "rats", msg: "You clear the rats! You find a **lantern**.", get: "lantern" } }
     },
-    "sorcerer_gate": {
-        title: "Sorcerer's Gate", art: art.gate,
-        desc: () => state.flags.gate_open ? "The gate is open to the peaks NORTH." : "A locked iron gate blocks the way NORTH.",
-        exits: { south: "mountain_pass", north: "frozen_peaks" },
-        condition: (d) => (d === "north" && !state.flags.gate_open) ? "Sealed by magic." : null,
-        interactions: { "sigil": { flag: "gate_open", msg: "The gate opens!" } }
+    "maze": {
+        step: 8, title: "Whispering Maze", art: arts.nature,
+        desc: "A foggy maze. A **Nymph** guards the center. SOUTH to Oakhaven.",
+        exits: { south: "square", north: "gate" },
+        condition: (d) => (d === "north" && !state.inv.includes("lantern")) ? "Too dark." : null,
+        npcs: { "nymph": { name: "Sariel", intro: "I guard the Sigil.", dialogue: { root: { text: "The sun must return. Take this.", options: [{text:"[TAKE SIGIL]", next:"exit", get:"sigil"}] } } } }
     },
-    "frozen_peaks": {
-        title: "Frozen Peaks", art: art.mountains,
-        desc: "Blinding snow. A bottomless chasm is NORTH. A **Hermit** is here.",
-        exits: { south: "sorcerer_gate", north: "citadel" },
-        npcs: { "hermit": { name: "Hermit", intro: "The bridge is invisible!", dialogue: { root: { text: "Only Dragon-Fire Ale shows the path.", options: [{text:"I'll get some.", next:"exit"}] } } } }
+    "gate": {
+        step: 10, title: "Sorcerer's Gate", art: arts.tower,
+        desc: () => state.flags.gate ? "The gate is open to the NORTH." : "A massive gate blocks the NORTH.",
+        exits: { south: "pass", north: "peaks" },
+        condition: (d) => (d === "north" && !state.flags.gate) ? "It's sealed." : null,
+        interactions: { "sigil": { flag: "gate", msg: "The gate opens!" } }
     },
-    "citadel": {
-        title: "Malakor's Tower", art: art.citadel,
-        desc: "The final tower. A library is WEST, the Throne is NORTH.",
-        exits: { south: "frozen_peaks", west: "library", north: "throne" }
-    },
-    "library": {
-        title: "The Library", art: art.citadel,
-        desc: "Ancient scrolls. A **scroll** is on the desk.",
-        exits: { east: "citadel" }, items: ["scroll"]
+    "peaks": {
+        step: 15, title: "Frozen Peaks", art: arts.nature,
+        desc: "A blizzard. A chasm is NORTH. A **Hermit** huddles by a fire.",
+        exits: { south: "gate", north: "throne" },
+        npcs: { "hermit": { name: "Hermit", intro: "Drink 'ale' to see the bridge.", dialogue: { root: { text: "Boran at the Tavern has the Dragon-Fire Ale.", options: [{text:"I'll go back.", next:"exit"}] } } } }
     },
     "throne": {
-        title: "Throne Room", art: art.citadel,
-        desc: "Malakor holds the Sun Gem.",
-        npcs: { "malakor": { name: "Malakor", intro: "End of the line.", dialogue: { root: { text: "Surrender!", options: [{text:"[USE SCROLL]", next:"win", cond:()=>state.inv.includes("scroll")}] } }, win: { text: "He vanishes!", options: [{text:"TAKE GEM", next:"victory"}] } } }
+        step: 20, title: "Throne of Shadow", art: arts.tower,
+        desc: "Malakor stands here.",
+        npcs: { "malakor": { name: "Malakor", intro: "You die now.", dialogue: { root: { text: "Surrender!", options: [{text:"[USE SCROLL]", next:"win", cond:()=>state.inv.includes("scroll")}] } } } }
     }
 };
 
-/** 4. ENGINE CORE **/
+/** 2. ENGINE **/
 const display = document.getElementById('display');
 const artBox = document.getElementById('art-display');
 const inputField = document.getElementById('cmd-input');
@@ -189,53 +124,41 @@ function print(text, cls = "") {
     display.scrollTop = display.scrollHeight;
 }
 
-const flavors = [
-    "The shadows seem to stretch longer...",
-    "A cold breeze whistles through the ruins.",
-    "You feel the weight of the Sun Gem's absence.",
-    "Somewhere far off, a wolf howls.",
-    "The air smells of ancient dust and ozone."
-];
-
 function updateHUD() {
-    const room = world[state.current];
-    document.getElementById('stat-loc').innerText = `Location: ${room.title}`;
-    document.getElementById('stat-turn').innerText = `Turns: ${state.turns}`;
+    const r = world[state.current];
+    document.getElementById('stat-loc').innerText = `Location: ${r.title}`;
+    document.getElementById('stat-step').innerText = `Step: ${r.step}/20`;
     document.getElementById('stat-score').innerText = `Score: ${state.score}`;
 }
 
 function render() {
-    const room = world[state.current];
+    const r = world[state.current];
     display.innerHTML = "";
-    artBox.innerText = room.art || art.forest;
-    print(room.title, "room-title");
-    print(typeof room.desc === "function" ? room.desc() : room.desc);
-    
-    if (room.items?.length) print(`Items: <span style="color:var(--cga-cyan)">${room.items.join(", ")}</span>`);
-    const npcs = Object.keys(room.npcs || {});
-    if (npcs.length) print(`People: <span class="npc-name">${npcs.join(", ").toUpperCase()}</span>`);
-    
-    if (state.turns % 6 === 0 && state.turns > 0) {
-        print(flavors[Math.floor(Math.random() * flavors.length)], "flavor-text");
-    }
+    artBox.innerText = r.art;
+    print(r.title, "room-title");
+    print(typeof r.desc === "function" ? r.desc() : r.desc);
+    if (r.items?.length) print(`Items: <span style="color:var(--cga-cyan)">${r.items.join(", ")}</span>`);
+    const n = Object.keys(r.npcs || {});
+    if (n.length) print(`People: <span class="npc-name">${n.join(", ").toUpperCase()}</span>`);
+    if (state.turns % 5 === 0 && state.turns > 0) print("The air feels colder...", "flavor-text");
     updateHUD();
 }
 
 function handle(raw) {
-    if (state.game_over) return;
-    const input = raw.toLowerCase().trim();
-    const parts = input.split(" ");
+    const cmd = raw.toLowerCase().trim();
+    const parts = cmd.split(" ");
     const verb = parts[0];
     const room = world[state.current];
 
     if (state.activeNPC) {
-        const choice = parseInt(input) - 1;
+        const choice = parseInt(cmd) - 1;
         const node = state.activeNPC.data.dialogue[state.activeNPC.node];
         if (node.options[choice]) {
-            const opt = node.options[choice];
-            if (opt.next === "exit") { state.activeNPC = null; render(); }
-            else if (opt.next === "victory") { state.game_over = true; print("VICTORY! You saved the sun!", "room-title"); }
-            else { state.activeNPC.node = opt.next; displayDialogue(); }
+            const o = node.options[choice];
+            if (o.get) state.inv.push(o.get);
+            if (o.next === "exit") { state.activeNPC = null; render(); }
+            else if (o.next === "win") { display.innerHTML = "<h1>VICTORY</h1>"; state.current="forest"; }
+            else { state.activeNPC.node = o.next; displayDialogue(); }
         }
         return;
     }
@@ -243,50 +166,43 @@ function handle(raw) {
     state.turns++;
     print(`> ${raw}`, "user-cmd");
 
-    if (["north", "south", "east", "west", "up", "down"].includes(verb)) {
+    if (["north","south","east","west","up","down"].includes(verb)) {
         if (room.exits[verb]) {
             const err = room.condition ? room.condition(verb) : null;
             if (err) print(err, "error-text");
             else { state.current = room.exits[verb]; render(); }
-        } else print("Path blocked.");
+        } else print("Blocked.");
     } 
     else if (verb === "talk") {
-        const target = room.npcs[parts[parts.length-1]] || Object.values(room.npcs || {})[0];
-        if (target) { state.activeNPC = { data: target, node: "root" }; displayDialogue(); }
+        const t = room.npcs[parts[parts.length-1]] || Object.values(room.npcs || {})[0];
+        if (t) { state.activeNPC = { data: t, node: "root" }; displayDialogue(); }
         else print("No one here.");
     }
     else if (verb === "take") {
-        const item = parts[parts.length-1];
-        if (room.items?.includes(item)) {
-            state.inv.push(item);
-            room.items = room.items.filter(i => i !== item);
-            print(`Taken ${item}.`);
-            updateHUD();
-        } else print("Not here.");
+        const i = parts[parts.length-1];
+        if (room.items?.includes(i)) { state.inv.push(i); room.items = room.items.filter(x => x!==i); print(`Got ${i}.`); updateHUD(); }
+        else print("Not here.");
     }
     else if (verb === "use" || verb === "give") {
-        const item = state.inv.find(i => input.includes(i));
-        const interact = room.interactions?.[item];
-        if (interact) {
-            print(interact.msg, "npc-text");
-            if (interact.get) state.inv.push(interact.get);
-            if (interact.flag) state.flags[interact.flag] = true;
-            state.inv = state.inv.filter(i => i !== item);
-            state.score += 20;
-            render();
-        } else print("Nothing happened.");
+        const i = state.inv.find(x => cmd.includes(x));
+        const act = room.interactions?.[i];
+        if (act) {
+            print(act.msg, "npc-text");
+            if (act.get) state.inv.push(act.get);
+            if (act.flag) state.flags[act.flag] = true;
+            state.inv = state.inv.filter(x => x!==i);
+            state.score += 20; render();
+        } else print("Nothing happens.");
     }
     else if (verb === "inv") print("Inv: " + (state.inv.join(", ") || "Empty"));
-    else if (verb === "help") print("Hint: " + (room.hint || "Try talking to someone."));
 }
 
 function displayDialogue() {
-    const npc = state.activeNPC.data;
-    const node = npc.dialogue[state.activeNPC.node];
+    const n = state.activeNPC.data;
+    const node = n.dialogue[state.activeNPC.node];
     display.innerHTML = "";
-    artBox.innerText = `[ CONVERSATION: ${npc.name.toUpperCase()} ]`;
-    print(npc.name, "npc-name");
-    print(`"${typeof node.text === 'function' ? node.text() : node.text}"`, "npc-text");
+    print(n.name, "npc-name");
+    print(`"${node.text}"`, "npc-text");
     node.options.forEach((o, i) => print(`${i + 1}. ${o.text}`, "user-cmd"));
 }
 
