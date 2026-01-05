@@ -3,7 +3,7 @@
  <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Aethelgard: The 20 Steps</title>
+  <title>Aethelgard</title>
   <script src="/_sdk/element_sdk.js"></script>
   <style>
         body {
@@ -44,6 +44,89 @@
             flex-direction: column;
             position: relative;
             box-shadow: 0 0 60px rgba(0, 217, 255, 0.2);
+        }
+        
+        #main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        #content-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        #inventory-panel {
+            width: 280px;
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border-left: 3px solid var(--accent-cyan);
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -4px 0 20px var(--border-glow);
+        }
+        
+        #inventory-panel h2 {
+            color: var(--accent-cyan);
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px var(--accent-cyan);
+            border-bottom: 2px solid var(--accent-cyan);
+            padding-bottom: 10px;
+        }
+        
+        #inventory-list {
+            margin-bottom: 30px;
+        }
+        
+        .inventory-item {
+            background: rgba(0, 217, 255, 0.1);
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            color: var(--accent-green);
+            font-size: 0.9rem;
+        }
+        
+        .inventory-empty {
+            color: rgba(232, 244, 248, 0.4);
+            font-style: italic;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        #map-section {
+            margin-top: 20px;
+        }
+        
+        #mini-map {
+            font-size: 0.65rem;
+            line-height: 1.1;
+            white-space: pre;
+            background: var(--bg-primary);
+            padding: 12px;
+            border-radius: 4px;
+            border: 2px solid var(--accent-cyan);
+            box-shadow: 0 0 15px var(--border-glow), inset 0 0 15px rgba(0, 217, 255, 0.1);
+            color: var(--accent-gold);
+            overflow-x: auto;
+        }
+        
+        .map-current {
+            color: var(--accent-magenta);
+            font-weight: bold;
+            text-shadow: 0 0 8px var(--accent-magenta);
+        }
+        
+        .map-visited {
+            color: var(--accent-cyan);
+        }
+        
+        .map-unvisited {
+            color: rgba(232, 244, 248, 0.3);
         }
         
         /* Opening Instruction Screen */
@@ -358,6 +441,28 @@
             animation: glow 2s ease-in-out infinite;
         }
         
+        .puzzle-box {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-magenta);
+            border-radius: 4px;
+            padding: 20px;
+            margin: 15px 0;
+            box-shadow: 0 0 15px rgba(255, 0, 110, 0.3);
+        }
+        
+        .puzzle-title {
+            color: var(--accent-magenta);
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        
+        .riddle-text {
+            color: var(--accent-gold);
+            font-style: italic;
+            line-height: 1.6;
+        }
+        
         /* Responsive adjustments */
         @media (max-width: 768px) {
             #intro-overlay h1 {
@@ -379,6 +484,10 @@
             .room-title {
                 font-size: 1.3rem;
             }
+            
+            #inventory-panel {
+                display: none;
+            }
         }
     </style>
   <style>@view-transition { navigation: auto; }</style>
@@ -388,7 +497,7 @@
  <body class="h-full">
   <div id="game-container">
    <div id="intro-overlay">
-    <h1 id="game-title">AETHELGARD: THE 20 STEPS</h1>
+    <h1 id="game-title">AETHELGARD</h1>
     <p id="intro-text">Travel 20 locations to reclaim the Sun Gem from the Sorcerer Malakor.</p>
     <div class="instructions-box">
      <p>• <b>NORTH, SOUTH, EAST, WEST, UP, DOWN</b> to move</p>
@@ -396,6 +505,8 @@
      <p>• <b>TAKE [ITEM]</b> to pick something up</p>
      <p>• <b>TALK [PERSON]</b> to start a conversation</p>
      <p>• <b>GIVE or USE [ITEM]</b> to interact with items</p>
+     <p>• <b>ANSWER [TEXT]</b> to solve riddles</p>
+     <p>• <b>COMBINE [ITEM1] [ITEM2]</b> to create new items</p>
      <p>• <b>INV</b> shows inventory (also visible in sidebar)</p>
      <p>• <b>HINT</b> for humorous guidance when stuck</p>
     </div><button class="btn-start" id="start-button" onclick="startGame()">BEGIN QUEST</button>
@@ -415,6 +526,10 @@
       <div class="inventory-empty">
        No items yet
       </div>
+     </div>
+     <div id="map-section">
+      <h2>🗺️ MAP</h2>
+      <div id="mini-map"></div>
      </div>
     </div>
    </div>
@@ -515,13 +630,43 @@
     }
 
     // Game Logic
-    let state = { current: "forest", inv: [], flags: {}, score: 0, turns: 0, activeNPC: null };
+    let state = { 
+        current: "forest", 
+        inv: [], 
+        flags: {}, 
+        score: 0, 
+        turns: 0, 
+        activeNPC: null,
+        visited: new Set(["forest"]),
+        moralChoices: { merciful: 0, ruthless: 0 }
+    };
 
     const arts = {
         nature: "\n   🌲  🌲  🌲   \n  / \\  / \\  / \\  \n🌿   🌿   🌿\n  🪨     🪨  \n    🍃 🍃    ",
         town: "\n     🏰     \n   _/🪟\\_    \n  |  🚪  |   \n  |______|   \n~~🌾🌾🌾🌾~~",
         cave: "\n  /----------\\\n /  🦇       \\\n|    (o) (o)   |\n|       V      |\n \\____________/",
         tower: "\n     ⚡     \n     🗼     \n    /🪟🪟\\    \n   | 🚪 |   \n   |_|_|_|   "
+    };
+
+    // Puzzle/riddle answers
+    const puzzles = {
+        sphinx: {
+            question: "I speak without a mouth and hear without ears. I have no body, but come alive with wind. What am I?",
+            answers: ["echo", "an echo"],
+            hint: "Think about sounds bouncing back..."
+        },
+        runes: {
+            sequence: "🌙 ⭐ ☀️ ⭐ 🌙 ☀️ ?",
+            answer: "star",
+            answers: ["star", "⭐"],
+            hint: "The pattern alternates... what comes after sun?"
+        }
+    };
+
+    // Item combinations
+    const combinations = {
+        "rope_hook": { items: ["rope", "hook"], result: "grappling_hook", msg: "💡 You tie the rope to the hook, creating a grappling hook!" },
+        "torch_oil": { items: ["torch", "oil"], result: "burning_torch", msg: "🔥 You soak the torch in oil. It burns brighter now!" }
     };
 
     const hints = {
@@ -570,8 +715,13 @@
             "🔱 The Forest Sigil is here! Just TALK and be polite. Fairies appreciate manners.",
             "💎 This is what you came for! Now you just need to figure out what to do with it..."
         ],
+        "sphinx": [
+            "🦁 This sphinx loves riddles. ANSWER correctly to proceed!",
+            "💭 If you're stuck, try typing HINT for the riddle specifically.",
+            "🧠 Think about things that travel through air and bounce back..."
+        ],
         "gate": [
-            "���� Gates sealed by dark magic respond poorly to kicking. Try using magical items instead.",
+            "🚪 Gates sealed by dark magic respond poorly to kicking. Try using magical items instead.",
             "🔱 If you have a Forest Sigil, maybe USE it? Just a wild guess.",
             "⚡ Sealed gates + Magic items = Open gates. I'm basically a genius."
         ],
@@ -593,7 +743,7 @@
         "hut": [
             "🧙 Hermits know things. Secret things. Ale-related things. TALK to him!",
             "🍺 He mentions ale. Boran has ale. Connect the dots, genius.",
-            "��️ You'll need to backtrack to the tavern eventually. But TALK to the Hermit first!"
+            "🗺️ You'll need to backtrack to the tavern eventually. But TALK to the Hermit first!"
         ],
         "bridge": [
             "🍺 Invisible bridges need magical ale. It's in the rulebook. I checked.",
@@ -657,7 +807,7 @@
                             ]
                         }, 
                         hint: { 
-                            text: "It's hidden deep in the Whispering Maze, North of here.", 
+                            text: "It's hidden deep in the Whispering Maze, North of here. But beware the Sphinx who guards the path!", 
                             options: [{text:"Thanks.", next:"exit"}] 
                         } 
                     } 
@@ -667,7 +817,7 @@
         "tavern": { 
             step: 4, title: "Dragon Tavern", art: arts.town, 
             exits: { east: "square", down: "cellar" }, 
-            condition: (d) => (d === "down" && !state.inv.includes("silver_key")) ? "���� The cellar hatch is locked." : null, 
+            condition: (d) => (d === "down" && !state.inv.includes("silver_key")) ? "🔒 The cellar hatch is locked." : null, 
             desc: "Smoky pub. A hatch leads DOWN. 🍺 <b>Boran</b> the barman is here.",
             npcs: { 
                 "boran": { 
@@ -710,7 +860,7 @@
         },
         "pass": { 
             step: 6, title: "High Pass", art: arts.nature, 
-            exits: { south: "square", north: "maze_in", east: "gate" }, 
+            exits: { south: "square", north: "sphinx", east: "gate" }, 
             desc: "A rocky path. A ⚒️ <b>Blacksmith</b> is here.",
             npcs: { 
                 "smith": { 
@@ -732,19 +882,26 @@
                 } 
             } 
         },
+        "sphinx": {
+            step: 7, title: "Sphinx Gate", art: arts.nature,
+            exits: { south: "pass", north: "maze_in" },
+            condition: (d) => (d === "north" && !state.flags.sphinx_solved) ? "🦁 The Sphinx blocks your path. 'Answer my riddle to pass!'" : null,
+            desc: () => state.flags.sphinx_solved ? "The Sphinx nods respectfully. The path NORTH is clear." : "A massive stone Sphinx guards the path. Its eyes glow with ancient wisdom.",
+            puzzle: "sphinx"
+        },
         "maze_in": { 
-            step: 7, title: "Maze Entrance", art: arts.nature, 
-            exits: { south: "pass", north: "maze_deep" }, 
+            step: 8, title: "Maze Entrance", art: arts.nature, 
+            exits: { south: "sphinx", north: "maze_deep" }, 
             condition: (d) => (d === "north" && !state.inv.includes("lantern")) ? "⚠️ Too dark to enter." : null, 
             desc: "Thorny walls lead NORTH into darkness." 
         },
         "maze_deep": { 
-            step: 8, title: "Whispering Maze", art: arts.nature, 
+            step: 9, title: "Whispering Maze", art: arts.nature, 
             exits: { south: "maze_in", east: "shrine" }, 
             desc: "Shadows twist and turn. You hear whispers." 
         },
         "shrine": { 
-            step: 9, title: "Bloom Shrine", art: arts.nature, 
+            step: 10, title: "Bloom Shrine", art: arts.nature, 
             exits: { west: "maze_deep" }, 
             desc: "A glowing grove. A 🧚 <b>Nymph</b> is here.",
             npcs: { 
@@ -761,7 +918,7 @@
             } 
         },
         "gate": { 
-            step: 10, title: "Sorcerer's Gate", art: arts.tower, 
+            step: 11, title: "Sorcerer's Gate", art: arts.tower, 
             exits: { west: "pass", north: "peaks" }, 
             condition: (d) => (d === "north" && !state.flags.gate) ? "🚫 The gate is sealed by dark magic." : null, 
             interactions: { 
@@ -773,23 +930,23 @@
             desc: "A massive black iron gate blocks the way north." 
         },
         "peaks": { 
-            step: 11, title: "Frozen Peaks", art: arts.nature, 
+            step: 12, title: "Frozen Peaks", art: arts.nature, 
             exits: { south: "gate", north: "ice_cave" }, 
             desc: "❄️ The air is freezing. Snow swirls around you." 
         },
         "ice_cave": { 
-            step: 12, title: "Ice Cave", art: arts.cave, 
+            step: 13, title: "Ice Cave", art: arts.cave, 
             exits: { south: "peaks", north: "chasm" }, 
             items: ["cloak"], 
             desc: "A frozen cavern. You find a fur 🧥 <b>cloak</b> here." 
         },
         "chasm": { 
-            step: 13, title: "The Chasm", art: arts.nature, 
+            step: 14, title: "The Chasm", art: arts.nature, 
             exits: { south: "ice_cave", north: "hut" }, 
             desc: "A narrow bridge of ice spans a bottomless void." 
         },
         "hut": { 
-            step: 14, title: "Hermit's Hut", art: arts.nature, 
+            step: 15, title: "Hermit's Hut", art: arts.nature, 
             exits: { south: "chasm", north: "bridge" }, 
             desc: "A small shack. Smoke rises from the chimney. A 🧙 <b>Hermit</b> is here.", 
             npcs: { 
@@ -810,7 +967,7 @@
             } 
         },
         "bridge": { 
-            step: 15, title: "The Abyss", art: arts.nature, 
+            step: 16, title: "The Abyss", art: arts.nature, 
             exits: { south: "hut", north: "citadel" }, 
             condition: (d) => (d === "north" && !state.flags.seen) ? "⚠️ There's no bridge! You'll fall!" : null, 
             interactions: { 
@@ -822,28 +979,28 @@
             desc: "An empty void stretches before you." 
         },
         "citadel": { 
-            step: 16, title: "Citadel Gate", art: arts.tower, 
+            step: 17, title: "Citadel Gate", art: arts.tower, 
             exits: { south: "bridge", north: "hall" }, 
             desc: "The dark fortress of Malakor looms above." 
         },
         "hall": { 
-            step: 17, title: "Grand Hall", art: arts.tower, 
+            step: 18, title: "Grand Hall", art: arts.tower, 
             exits: { south: "citadel", west: "library", north: "ante" }, 
             desc: "Cold stone floors. Torches flicker on the walls." 
         },
         "library": { 
-            step: 18, title: "Library", art: arts.tower, 
+            step: 19, title: "Library", art: arts.tower, 
             exits: { east: "hall" }, 
             items: ["scroll"], 
             desc: "Dusty books line the shelves. A glowing 📜 <b>scroll</b> rests on a pedestal." 
         },
         "ante": { 
-            step: 19, title: "Antechamber", art: arts.tower, 
+            step: 20, title: "Antechamber", art: arts.tower, 
             exits: { south: "hall", north: "throne" }, 
             desc: "The final door. Dark energy pulses beyond it." 
         },
         "throne": { 
-            step: 20, title: "Throne Room", art: arts.tower, 
+            step: 21, title: "Throne Room", art: arts.tower, 
             exits: { south: "ante" }, 
             desc: () => state.flags.victory ? "🌟 The Sun Gem radiates warmth! Light returns to the land!" : "⚫ Malakor sits on his throne, clutching the Sun Gem.",
             npcs: { 
@@ -854,19 +1011,89 @@
                         root: { 
                             text: "The Sun Gem is MINE! You cannot defeat me!", 
                             options: [
-                                {text:"[USE SCROLL]", cond:()=>state.inv.includes("scroll"), next:"win"}, 
+                                {text:"[USE SCROLL]", cond:()=>state.inv.includes("scroll"), next:"battle"}, 
                                 {text:"I will stop you!", next:"exit"}
                             ] 
-                        } 
+                        },
+                        battle: {
+                            text: "The scroll blazes with light! Malakor screams as his dark magic unravels. What will you do?",
+                            options: [
+                                {text:"[SPARE HIM] Show mercy", next:"mercy"},
+                                {text:"[BANISH HIM] End this forever", next:"banish"}
+                            ]
+                        },
+                        mercy: {
+                            text: "You spare Malakor's life. He kneels, swearing to renounce darkness.",
+                            options: [{text:"[Take the Gem]", next:"win_mercy"}]
+                        },
+                        banish: {
+                            text: "You banish Malakor to the void. His screams echo into nothingness.",
+                            options: [{text:"[Take the Gem]", next:"win_banish"}]
+                        }
                     } 
                 } 
             } 
         }
     };
 
+    const mapLayout = `
+    ┌─────────────────┐
+    │   THRONE(21)    │
+    └────────┬────────┘
+    ┌────────┴────────┐
+    │   ANTE (20)     │
+    └────┬─────┬──────┘
+   ┌─────┴──┐ ┌┴──────┐
+   │LIBRARY │ │ HALL  │
+   │  (19)  │ │ (18)  │
+   └────────┘ └───┬───┘
+    ┌─────────────┴───┐
+    │  CITADEL (17)   │
+    └─────────┬───────┘
+    ┌─────────┴───────┐
+    │  BRIDGE (16)    │
+    └─────────┬───────┘
+    ┌─────────┴───────┐
+    │    HUT (15)     │
+    └─────────┬───────┘
+    ┌─────────┴───────┐
+    │  CHASM (14)     │
+    └─────────┬───────┘
+    ┌─────────┴───────┐
+    │ ICE_CAVE (13)   │
+    └─────────┬───────┘
+    ┌─────────┴───────┐
+    │  PEAKS (12)     │
+    └─────────┬───────┘
+         ┌────┴────┐
+    ┌────┴───┐ ┌──┴─────┐
+    │ PASS(6)│ │GATE(11)│
+    └─┬──┬───┘ └────────┘
+  ┌───┴┐ └──┬─────┐
+  │SPH │    │SHRINE│
+  │(7) │    │ (10) │
+  └─┬──┘    └──────┘
+┌───┴────┐      ┌──┐
+│MAZE_IN │◄─────┤9 │
+│  (8)   │      └──┘
+└───┬────┘
+┌───┴────┐
+│SQUARE  │
+│  (3)   │
+└─┬──┬───┘
+┌─┴┐ └──┬────┐
+│2 │    │TAV │
+│  │    │(4) │
+└─┬┘    └─┬──┘
+┌─┴──┐  ┌─┴──┐
+│FOR │  │CEL │
+│(1) │  │(5) │
+└────┘  └────┘`;
+
     const display = document.getElementById('display');
     const artBox = document.getElementById('art-display');
     const inputField = document.getElementById('cmd-input');
+    const miniMap = document.getElementById('mini-map');
 
     function startGame() { 
         const overlay = document.getElementById('intro-overlay');
@@ -874,6 +1101,7 @@
         setTimeout(() => {
             overlay.style.display = 'none';
             render();
+            updateMap();
             inputField.focus();
         }, 500);
     }
@@ -897,6 +1125,75 @@
         }
     }
 
+    function updateMap() {
+        const roomNames = {
+            "forest": "FOR", "wagon": "2", "square": "SQUARE", "tavern": "TAV",
+            "cellar": "CEL", "pass": "PASS", "sphinx": "SPH", "maze_in": "MAZE_IN",
+            "maze_deep": "9", "shrine": "SHRINE", "gate": "GATE", "peaks": "PEAKS",
+            "ice_cave": "ICE_CAVE", "chasm": "CHASM", "hut": "HUT", "bridge": "BRIDGE",
+            "citadel": "CITADEL", "hall": "HALL", "library": "LIBRARY", "ante": "ANTE",
+            "throne": "THRONE"
+        };
+
+        let mapText = mapLayout;
+        
+        // Highlight current location
+        const currentName = roomNames[state.current] || state.current.toUpperCase();
+        const currentRegex = new RegExp(`(${currentName.replace(/[()]/g, '\\$&')})`, 'g');
+        mapText = mapText.replace(currentRegex, '<span class="map-current">$1</span>');
+        
+        // Highlight visited locations
+        state.visited.forEach(room => {
+            if (room !== state.current) {
+                const roomName = roomNames[room] || room.toUpperCase();
+                const visitedRegex = new RegExp(`(${roomName.replace(/[()]/g, '\\$&')})`, 'g');
+                mapText = mapText.replace(visitedRegex, '<span class="map-visited">$1</span>');
+            }
+        });
+        
+        miniMap.innerHTML = mapText;
+    }
+
+    function showPuzzle(puzzleKey) {
+        const puzzle = puzzles[puzzleKey];
+        print('<div class="puzzle-box"><div class="puzzle-title">🧩 RIDDLE</div><div class="riddle-text">' + puzzle.question + '</div><div style="margin-top: 10px; color: var(--accent-cyan);">Type: ANSWER [your answer]</div></div>');
+    }
+
+    function checkPuzzleAnswer(puzzleKey, answer) {
+        const puzzle = puzzles[puzzleKey];
+        const normalized = answer.toLowerCase().trim();
+        
+        if (puzzle.answers.includes(normalized)) {
+            state.flags.sphinx_solved = true;
+            state.score += 50;
+            print("✅ The Sphinx's eyes glow brighter. 'Correct! You may pass, wise traveler.'", "success-msg");
+            setTimeout(render, 1500);
+            return true;
+        } else {
+            print("❌ The Sphinx shakes its head. 'Incorrect. Think harder...'", "error-msg");
+            return false;
+        }
+    }
+
+    function tryCombine(item1, item2) {
+        const key1 = item1 + "_" + item2;
+        const key2 = item2 + "_" + item1;
+        
+        const combo = combinations[key1] || combinations[key2];
+        
+        if (combo && state.inv.includes(item1) && state.inv.includes(item2)) {
+            state.inv = state.inv.filter(i => i !== item1 && i !== item2);
+            state.inv.push(combo.result);
+            state.score += 30;
+            print(combo.msg, "success-msg");
+            updateInventoryDisplay();
+            return true;
+        } else {
+            print("❌ Those items don't combine.", "error-msg");
+            return false;
+        }
+    }
+
     function render() {
         const r = world[state.current];
         if (!r) return;
@@ -907,6 +1204,11 @@
         print(r.title, "room-title");
         print(typeof r.desc === "function" ? r.desc() : r.desc);
         
+        // Show puzzle if present
+        if (r.puzzle && !state.flags[r.puzzle + "_solved"]) {
+            showPuzzle(r.puzzle);
+        }
+        
         if (r.items?.length) print(`<span class="item-highlight">📦 Items: ${r.items.join(", ")}</span>`);
         
         const n = Object.keys(r.npcs || {});
@@ -916,8 +1218,30 @@
         print(`Available Directions: ${exits.join(", ")}`, "exit-list");
         
         document.getElementById('stat-loc').innerHTML = `📍 Location: ${r.title}`;
-        document.getElementById('stat-step').innerHTML = `🚶 Step: ${r.step}/20`;
+        document.getElementById('stat-step').innerHTML = `🚶 Step: ${r.step}/21`;
         document.getElementById('stat-score').innerHTML = `⭐ Score: ${state.score}`;
+        
+        updateMap();
+    }
+
+    function showEnding(type) {
+        let endingHTML = '<div class="victory-screen"><h1>🎉 VICTORY! 🎉</h1>';
+        
+        if (type === "mercy") {
+            endingHTML += '<p style="color: var(--accent-cyan); font-size: 1.5rem;">You showed mercy to Malakor!</p>';
+            endingHTML += '<p style="color: var(--accent-gold); font-size: 1.2rem; margin-top: 20px;">The Sun Gem is restored! Light returns to Aethelgard.</p>';
+            endingHTML += '<p style="color: var(--accent-green); margin-top: 15px;">Malakor, humbled by your compassion, becomes a force for good. The realm enters an age of redemption and peace.</p>';
+            endingHTML += '<p style="margin-top: 20px; color: var(--accent-magenta);">✨ MERCIFUL ENDING ✨</p>';
+        } else if (type === "banish") {
+            endingHTML += '<p style="color: var(--accent-cyan); font-size: 1.5rem;">You banished Malakor forever!</p>';
+            endingHTML += '<p style="color: var(--accent-gold); font-size: 1.2rem; margin-top: 20px;">The Sun Gem is restored! Light returns to Aethelgard.</p>';
+            endingHTML += '<p style="color: var(--accent-green); margin-top: 15px;">With darkness vanquished completely, the realm flourishes. Your name becomes legend.</p>';
+            endingHTML += '<p style="margin-top: 20px; color: var(--accent-magenta);">⚔️ HEROIC ENDING ⚔️</p>';
+        }
+        
+        endingHTML += '<p style="color: var(--accent-cyan); margin-top: 30px; font-size: 1.1rem;">Final Score: ' + state.score + ' points</p></div>';
+        
+        display.innerHTML = endingHTML;
     }
 
     function handle(raw) {
@@ -941,9 +1265,16 @@
                     state.activeNPC = null; 
                     render(); 
                 }
-                else if (o.next === "win") { 
+                else if (o.next === "win_mercy") {
                     state.flags.victory = true;
-                    display.innerHTML = '<div class="victory-screen"><h1>🎉 VICTORY! 🎉</h1><p style="color: var(--accent-cyan); font-size: 1.5rem;">You used the ancient scroll to banish Malakor!</p><p style="color: var(--accent-gold); font-size: 1.3rem; margin-top: 20px;">The Sun Gem is restored! Light returns to Aethelgard!</p><p style="color: var(--accent-green); margin-top: 30px;">Final Score: ' + state.score + ' points</p></div>';
+                    state.moralChoices.merciful++;
+                    showEnding("mercy");
+                    state.activeNPC = null;
+                }
+                else if (o.next === "win_banish") {
+                    state.flags.victory = true;
+                    state.moralChoices.ruthless++;
+                    showEnding("banish");
                     state.activeNPC = null;
                 }
                 else { 
@@ -963,13 +1294,31 @@
                     print(err, "error-msg");
                 } else { 
                     state.current = room.exits[verb];
+                    state.visited.add(state.current);
                     if(state.current === "hut") state.flags.seen_hermit = true;
                     render();
                 }
             } else {
                 print("❌ You can't go that way.", "error-msg");
             }
-        } 
+        }
+        else if (verb === "answer") {
+            const answer = parts.slice(1).join(" ");
+            if (room.puzzle) {
+                checkPuzzleAnswer(room.puzzle, answer);
+            } else {
+                print("❌ There's no puzzle here to answer.", "error-msg");
+            }
+        }
+        else if (verb === "combine") {
+            if (parts.length < 3) {
+                print("❌ Usage: COMBINE [item1] [item2]", "error-msg");
+            } else {
+                const item1 = parts[1];
+                const item2 = parts[2];
+                tryCombine(item1, item2);
+            }
+        }
         else if (verb === "take") {
             const i = parts[parts.length-1];
             if (room.items?.includes(i)) { 
@@ -989,12 +1338,18 @@
             render();
         }
         else if (verb === "hint" || verb === "h") {
-            const locationHints = hints[state.current];
-            if (locationHints && locationHints.length > 0) {
-                const randomHint = locationHints[Math.floor(Math.random() * locationHints.length)];
-                print(randomHint, "npc-text");
+            // Check if there's an active puzzle
+            if (room.puzzle && !state.flags[room.puzzle + "_solved"]) {
+                const puzzle = puzzles[room.puzzle];
+                print(`💡 ${puzzle.hint}`, "npc-text");
             } else {
-                print("💭 You're doing great! Just... keep exploring. You got this!", "npc-text");
+                const locationHints = hints[state.current];
+                if (locationHints && locationHints.length > 0) {
+                    const randomHint = locationHints[Math.floor(Math.random() * locationHints.length)];
+                    print(randomHint, "npc-text");
+                } else {
+                    print("💭 You're doing great! Just... keep exploring. You got this!", "npc-text");
+                }
             }
         }
         else if (verb === "talk") {
@@ -1033,7 +1388,7 @@
             }
         }
         else {
-            print("❌ I don't understand. Try: NORTH, SOUTH, TAKE, TALK, GIVE, USE, LOOK, HINT, or INV", "error-msg");
+            print("❌ I don't understand. Try: NORTH, SOUTH, TAKE, TALK, GIVE, USE, ANSWER, COMBINE, LOOK, HINT, or INV", "error-msg");
         }
     }
 
@@ -1060,5 +1415,5 @@
         }
     });
 </script>
- <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b9538f1e545e0b5',t:'MTc2NzYzOTY2Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+ <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9b954b2d8547e0b5',t:'MTc2NzY0MDQxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
