@@ -96,6 +96,84 @@ const world = {
             }
         }
     }
+    "rusty_anvil": {
+        step: 4, title: "The Rusty Anvil Forge",
+        desc: () => state.flags.has_key 
+            ? "The forge is hot and bright. The Smith is busy working. A path leads SOUTH back to the pass." 
+            : "The forge is cold. The Blacksmith is missing. You should check the mountain pass to the SOUTH.",
+        exits: { south: "mountain_pass" },
+        items: [],
+        npcs: {
+            "smith": {
+                name: "Ironheart",
+                greeting: "Thanks to you, I'm back in business!",
+                dialogue: {
+                    "key": "That silver key opens the cellar in the Tavern. There's something nasty down there.",
+                    "tavern": "It's just West of the Village Square. Tell the Barkeeper I sent you."
+                }
+            }
+        },
+        hint: "If you have the Silver Key, head to the Tavern West of the Square."
+    },
+    "tavern": {
+        step: 5, title: "The Sleeping Dragon Tavern",
+        desc: "A rowdy tavern filled with smoke. A **Barkeeper** wipes the counter. A heavy hatch leads DOWN to the cellar. The exit is EAST.",
+        exits: { east: "village_square", down: "cellar" },
+        condition: (d) => (d === "down" && !state.inv.includes("silver_key")) ? "The hatch is locked with a silver padlock." : null,
+        npcs: {
+            "barkeeper": {
+                name: "Boran",
+                greeting: "Welcome! We're out of ale because of the 'rats' downstairs.",
+                dialogue: {
+                    "rats": "Huge things. They've taken over the cellar. I'd give anything to clear them out.",
+                    "maze": "The Forest Maze to the North is impossible to navigate without a lantern. I have one in the cellar... if you can get it."
+                }
+            }
+        },
+        hint: "Talk to Boran about 'rats'. If you have the key, go DOWN."
+    },
+    "cellar": {
+        step: 6, title: "The Dark Cellar",
+        desc: () => state.flags.rats_cleared 
+            ? "The cellar is quiet now. A dusty **lantern** sits on a crate. You can go UP." 
+            : "Huge, red-eyed rats hiss at you! You need a weapon to clear them. You can go UP.",
+        exits: { up: "tavern" },
+        items: [],
+        interactions: {
+            "hammer": { 
+                flag: "rats_cleared", 
+                msg: "You swing your hammer, scaring the rats into the shadows! You find a **lantern**.", 
+                get: "lantern",
+                score: 15
+            }
+        },
+        hint: "You need a 'hammer' (from the wagon in Step 1) to clear the rats."
+    },
+    "maze_entrance": {
+        step: 7, title: "Entrance to the Whispering Maze",
+        desc: "The trees here twist into unnatural shapes. To the NORTH, the maze begins. To the SOUTH is the village.",
+        exits: { south: "village_square", north: "maze_center" },
+        condition: (d) => (d === "north" && !state.inv.includes("lantern")) ? "It's too dark. You'd be lost forever without a light." : null,
+        npcs: {},
+        hint: "You must have the lantern from the Tavern Cellar to enter the maze."
+    },
+    "maze_center": {
+        step: 8, title: "The Heart of the Maze",
+        desc: "A magical clearing. A **Wood_Nymph** floats near a pedestal. The only clear path is SOUTH.",
+        exits: { south: "maze_entrance" },
+        items: ["forest_sigil"],
+        npcs: {
+            "nymph": {
+                name: "Sariel",
+                greeting: "Few find their way here, lantern-bearer.",
+                dialogue: {
+                    "sigil": "The Forest Sigil on that pedestal is required to enter the Sorcerer's Gate.",
+                    "sorcerer": "He dwells in the Frozen Peak, far to the North."
+                }
+            }
+        },
+        hint: "Take the 'forest_sigil' and head back to find the path to the Frozen Peak."
+    }
     // ... Additional steps (4-20) would follow this logic pattern
 };
 
@@ -127,14 +205,24 @@ function updateHUD() {
 }
 
 function render() {
+    function render() {
     const room = world[state.current];
+    if (room.win) { 
+        print(`<div class="win">${room.title}<br>${typeof room.desc === 'function' ? room.desc() : room.desc}</div>`); 
+        return; 
+    }
+    
     display.innerHTML = "";
-    print(room.title, "room-title");
-    print(room.desc);
+    print(`<span class="room-title">${room.title}</span>`);
     
-    if (room.items.length > 0) print(`Visible Items: <span style="color:var(--cga-cyan)">${room.items.join(", ")}</span>`);
+    // This line is the key tweak! 
+    // It checks: "Is the description a function? If yes, run it. If no, just print it."
+    const descriptionText = (typeof room.desc === "function") ? room.desc() : room.desc;
+    print(descriptionText);
     
-    const npcNames = Object.keys(room.npcs);
+    if (room.items?.length > 0) print(`Visible Items: <span style="color:var(--cga-cyan)">${room.items.join(", ")}</span>`);
+    
+    const npcNames = Object.keys(room.npcs || {});
     if (npcNames.length > 0) print(`People here: <span class="npc-name">${npcNames.join(", ").toUpperCase()}</span>`);
     
     updateHUD();
