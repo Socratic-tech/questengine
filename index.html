@@ -2,101 +2,114 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Aethelgard: Fate of the Kingdom</title>
+    <title>Aethelgard: The Living World</title>
     <style>
-        body { background: #0c0c0c; color: #55FF55; font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; overflow: hidden; }
-        #game-container { width: 90%; max-width: 900px; padding: 20px; position: relative; }
-        #display { height: 500px; overflow-y: auto; border: 2px solid #444; padding: 20px; background: #000; line-height: 1.6; }
-        #input-area { display: flex; align-items: center; padding: 15px 0; border-top: 1px solid #333; }
-        #cmd-input { background: transparent; border: none; color: #FFFF55; font-family: inherit; font-size: 1.2rem; width: 100%; outline: none; margin-left: 10px; }
+        :root { --cga-blue: #0000AA; --cga-cyan: #55FFFF; --cga-white: #FFFFFF; --cga-magenta: #FF55FF; --cga-yellow: #FFFF55; }
+        body { background: #000; color: var(--cga-white); font-family: 'Courier New', monospace; display: flex; justify-content: center; margin: 0; overflow: hidden; }
+        #game-container { width: 950px; height: 100vh; display: flex; flex-direction: column; border-left: 2px solid #333; border-right: 2px solid #333; }
         
-        /* Intro Screen Overlay */
-        #intro-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 2px solid #55FF55; }
-        .start-btn { background: #55FF55; color: #000; border: none; padding: 15px 30px; font-family: inherit; font-weight: bold; cursor: pointer; margin-top: 20px; }
-        .start-btn:hover { background: #FFFF55; }
+        #status-bar { background: var(--cga-blue); color: var(--cga-white); padding: 8px 20px; display: flex; justify-content: space-between; border-bottom: 2px solid var(--cga-white); font-size: 0.9rem; }
+        #display { flex-grow: 1; overflow-y: auto; padding: 25px; line-height: 1.6; background: #050505; }
+        #input-area { background: #111; padding: 20px; border-top: 2px solid var(--cga-white); display: flex; align-items: center; }
+        #cmd-input { background: transparent; border: none; color: var(--cga-cyan); font-family: inherit; font-size: 1.2rem; width: 100%; outline: none; margin-left: 10px; }
         
-        .room-title { color: #FF55FF; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #444; display: block; margin-bottom: 10px; }
-        .user-cmd { color: #FFFF55; margin: 10px 0; font-weight: bold; }
-        .ending-card { padding: 20px; border: 4px double #55FFFF; text-align: center; }
+        .room-title { color: var(--cga-magenta); font-size: 1.4rem; font-weight: bold; text-decoration: underline; margin-bottom: 15px; display: block; }
+        .npc-text { color: var(--cga-yellow); font-style: italic; }
+        .npc-name { color: var(--cga-magenta); font-weight: bold; }
+        .system-msg { color: #888; font-size: 0.9rem; }
+        .user-cmd { color: var(--cga-cyan); font-weight: bold; margin: 15px 0 5px 0; }
+        .error-text { color: #FF5555; }
     </style>
 </head>
 <body>
 
 <div id="game-container">
-    <div id="intro-screen">
-        <h1 style="color: #FF55FF;">THE AETHELGARD SAGA</h1>
-        <p style="max-width: 600px;">Welcome, Adventurer. Your choices shape the realm.</p>
-        <div style="text-align: left; background: #111; padding: 20px; border: 1px solid #333;">
-            <strong>HOW TO INTERACT:</strong><br>
-            • <b>GO [Direction]</b> - Move between areas (North, South, East, West)<br>
-            • <b>TAKE [Item]</b> - Pick up an object<br>
-            • <b>USE [Item]</b> - Use an item on your current surroundings<br>
-            • <b>INV</b> - View your inventory<br>
-            • <b>LOOK</b> - Re-describe the current room
-        </div>
-        <button class="start-btn" onclick="startGame()">BEGIN YOUR QUEST</button>
+    <div id="status-bar">
+        <span id="stat-loc">Location: Loading...</span>
+        <span id="stat-score">Score: 0</span>
+        <span id="stat-step">Step: 1/20</span>
     </div>
-
     <div id="display"></div>
-    <div id="input-area"><span>></span><input type="text" id="cmd-input" autocomplete="off"></div>
+    <div id="input-area">
+        <span>></span>
+        <input type="text" id="cmd-input" autofocus autocomplete="off" placeholder="Talk to people or move North...">
+    </div>
 </div>
 
 <script>
-/** 1. GAME STATE & MORAL TRACKER **/
-let state = {
-    current: "village_square",
-    inv: [],
-    flags: { fed_beggar: false, stole_gold: false, killed_guardian: false },
-    alignment: 0, // Positive = Merciful, Negative = Ruthless
-    gameStarted: false
+/** 1. DICTIONARY & SYNONYMS **/
+const vocab = {
+    move: ["go", "walk", "travel", "north", "south", "east", "west"],
+    take: ["get", "grab", "pick", "collect"],
+    talk: ["talk", "speak", "chat", "ask", "converse"],
+    look: ["look", "examine", "search"]
 };
 
-/** 2. THE BRANCHING WORLD DATA **/
+/** 2. THE WORLD & NPC DATA **/
 const world = {
+    "forest_edge": {
+        step: 1, title: "The Forest Edge",
+        desc: "A misty trailhead. To the NORTH lies the Village of Oakhaven. An **old_coin** reflects the dim light.",
+        exits: { north: "village_square" },
+        items: ["old_coin"],
+        npcs: {},
+        hint: "Pick up the coin and head North to find civilization."
+    },
     "village_square": {
-        title: "Oakhaven Square",
-        desc: () => "A starving beggar asks for a coin. To the NORTH is the path to the Castle. To the WEST is the Treasury.",
-        exits: { north: "castle_gates", west: "treasury" },
-        items: ["bread"],
+        step: 2, title: "Oakhaven Square",
+        desc: "The heart of the village. A wise **Elder** stands by the fountain. The road continues NORTH toward the mountains.",
+        exits: { south: "forest_edge", north: "mountain_pass" },
+        items: [],
+        npcs: {
+            "elder": {
+                name: "Elder Haim",
+                greeting: "Welcome, traveler. Our kingdom is in shadow.",
+                dialogue: {
+                    "shadow": "A dark sorcerer has stolen the Sun Gem. Only a hero with the Silver Key can enter his lair.",
+                    "key": "The Blacksmith used to have the Silver Key, but he lost it in the forest.",
+                    "coin": "That coin is old... keep it. You might need to buy passage eventually."
+                }
+            }
+        },
+        hint: "Talk to the Elder about the 'shadow' or the 'key'."
+    },
+    "mountain_pass": {
+        step: 3, title: "The High Pass",
+        desc: "The air turns cold. A rugged **Blacksmith** is searching the ground here. The path leads SOUTH or NORTH.",
+        exits: { south: "village_square", north: "ice_cave" },
+        npcs: {
+            "blacksmith": {
+                name: "Ironheart the Smith",
+                greeting: "Curses! I've lost my lucky coin. I can't work without it.",
+                dialogue: {
+                    "key": "If you find my coin, I'll give you the Silver Key I've been hiding.",
+                    "coin": "Have you seen it? It's an old silver piece."
+                }
+            }
+        },
         interactions: {
-            "bread": { msg: "You give the bread to the beggar. He blesses you.", align: 5, flag: "fed_beggar" }
+            "old_coin": { 
+                npc: "blacksmith", 
+                msg: "The Smith's eyes light up! 'My coin!' He hands you a **silver_key**.", 
+                get: "silver_key", 
+                flag: "has_key" 
+            }
         }
-    },
-    "treasury": {
-        title: "The Old Treasury",
-        desc: () => "A chest sits here. You could TAKE GOLD, but it belongs to the village. Exit EAST.",
-        exits: { east: "village_square" },
-        items: ["gold"],
-        onTake: (item) => { if(item === 'gold') { state.alignment -= 10; state.flags.stole_gold = true; } }
-    },
-    "castle_gates": {
-        title: "Castle Gates",
-        desc: () => "A mystical Guardian blocks the way NORTH. You can USE GOLD to bribe him, or USE BREAD to show mercy.",
-        exits: { north: "throne_room", south: "village_square" },
-        condition: (d) => (d === "north" && !state.flags.passed_gate) ? "The Guardian stands firm." : null,
-        interactions: {
-            "gold": { msg: "You bribe the Guardian. He sneers but lets you pass.", align: -5, flag: "passed_gate" },
-            "bread": { msg: "You share your food. The Guardian bows and steps aside.", align: 10, flag: "passed_gate" }
-        }
-    },
-    "throne_room": {
-        title: "The Throne Room",
-        desc: () => "The King awaits. Your journey is judged.",
-        exits: {},
-        isEnding: true
     }
+    // ... Additional steps (4-20) would follow this logic pattern
 };
 
-/** 3. ENGINE LOGIC **/
+/** 3. GAME STATE **/
+let state = {
+    current: "forest_edge",
+    inv: [],
+    flags: {},
+    score: 0
+};
+
+/** 4. ENGINE CORE **/
 const display = document.getElementById('display');
 const inputField = document.getElementById('cmd-input');
-
-function startGame() {
-    document.getElementById('intro-screen').style.display = 'none';
-    state.gameStarted = true;
-    render();
-    inputField.focus();
-}
 
 function print(text, cls = "") {
     const p = document.createElement('p');
@@ -106,75 +119,125 @@ function print(text, cls = "") {
     display.scrollTop = display.scrollHeight;
 }
 
+function updateHUD() {
+    const room = world[state.current];
+    document.getElementById('stat-loc').innerText = `Location: ${room.title}`;
+    document.getElementById('stat-score').innerText = `Score: ${state.score}`;
+    document.getElementById('stat-step').innerText = `Step: ${room.step}/20`;
+}
+
 function render() {
     const room = world[state.current];
-    if (room.isEnding) { renderEnding(); return; }
+    display.innerHTML = "";
+    print(room.title, "room-title");
+    print(room.desc);
     
-    display.innerHTML = "";
-    print(`<span class="room-title">${room.title}</span>`);
-    print(room.desc());
-    if (room.items?.length) print(`<span style="color: #55FFFF">You see: ${room.items.join(", ")}</span>`);
+    if (room.items.length > 0) print(`Visible Items: <span style="color:var(--cga-cyan)">${room.items.join(", ")}</span>`);
+    
+    const npcNames = Object.keys(room.npcs);
+    if (npcNames.length > 0) print(`People here: <span class="npc-name">${npcNames.join(", ").toUpperCase()}</span>`);
+    
+    updateHUD();
 }
 
-function renderEnding() {
-    display.innerHTML = "";
-    let endingTitle = "";
-    let endingDesc = "";
+function parseCommand(input) {
+    const raw = input.toLowerCase().trim();
+    const parts = raw.split(" ");
+    const verb = parts[0];
+    const noun = parts[parts.length - 1];
+    const room = world[state.current];
 
-    if (state.alignment >= 10) {
-        endingTitle = "THE BENEVOLENT HERO";
-        endingDesc = "You took the path of mercy. Aethelgard prospers under your kindness.";
-    } else if (state.alignment <= -10) {
-        endingTitle = "THE RUTHLESS TYRANT";
-        endingDesc = "You took what you wanted. You rule with an iron fist, but you are alone.";
-    } else {
-        endingTitle = "THE UNKNOWN WANDERER";
-        endingDesc = "You finished your quest, but the songs won't remember your name.";
-    }
-
-    print(`<div class="ending-card"><h1 style="color: #FFFF55">${endingTitle}</h1><p>${endingDesc}</p><button class="start-btn" onclick="location.reload()">PLAY AGAIN</button></div>`);
-}
-
-function handle(input) {
-    const p = input.toLowerCase().trim().split(" ");
-    const verb = p[0], noun = p[p.length - 1], room = world[state.current];
     print(`> ${input}`, "user-cmd");
 
-    if (verb === "go" || Object.keys(room.exits).includes(verb)) {
-        const dir = Object.keys(room.exits).includes(verb) ? verb : noun;
+    // Help / Hints
+    if (verb === "help" || verb === "hint") {
+        print(`SYSTEM: ${room.hint}`, "system-msg");
+        return;
+    }
+
+    // Movement
+    if (vocab.move.includes(verb) || ["north", "south", "east", "west"].includes(verb)) {
+        const dir = ["north", "south", "east", "west"].includes(verb) ? verb : noun;
         if (room.exits[dir]) {
-            const err = room.condition ? room.condition(dir) : null;
-            if (err) print(err);
-            else { state.current = room.exits[dir]; render(); }
-        } else print("You can't go that way.");
-    } else if (verb === "take") {
-        if (room.items?.includes(noun)) {
+            state.current = room.exits[dir];
+            render();
+        } else {
+            print(`You can't go ${dir}. Try: ${Object.keys(room.exits).join(", ").toUpperCase()}`, "error-text");
+        }
+        return;
+    }
+
+    // NPC Interaction (Talk)
+    if (vocab.talk.includes(verb)) {
+        const npc = room.npcs[noun] || Object.values(room.npcs)[0];
+        if (npc) {
+            // Check if asking about a specific topic
+            const topic = parts.find(w => npc.dialogue[w]);
+            if (topic) {
+                print(`<span class="npc-name">${npc.name}:</span> <span class="npc-text">"${npc.dialogue[topic]}"</span>`);
+            } else {
+                print(`<span class="npc-name">${npc.name}:</span> <span class="npc-text">"${npc.greeting}"</span>`);
+                print(`<span class="system-msg">(Try asking about: ${Object.keys(npc.dialogue).join(", ")})</span>`);
+            }
+        } else {
+            print("There is no one here to talk to.", "error-text");
+        }
+        return;
+    }
+
+    // Take Items
+    if (vocab.take.includes(verb)) {
+        if (room.items.includes(noun)) {
             state.inv.push(noun);
             room.items = room.items.filter(i => i !== noun);
-            if (room.onTake) room.onTake(noun);
-            print(`Picked up: ${noun}`);
-        } else print("Nothing to take.");
-    } else if (verb === "use") {
-        if (state.inv.includes(noun) && room.interactions?.[noun]) {
-            const act = room.interactions[noun];
-            if (act.flag) state.flags[act.flag] = true;
-            if (act.align) state.alignment += act.align;
-            print(act.msg);
-            render();
-        } else print("That doesn't seem to work here.");
-    } else if (verb === "inv") {
-        print("Inventory: " + (state.inv.join(", ") || "Empty"));
-    } else if (verb === "look") {
-        render();
+            state.score += 5;
+            print(`You picked up the ${noun}.`);
+            updateHUD();
+        } else {
+            print(`The ${noun} isn't here.`, "error-text");
+        }
+        return;
     }
+
+    // Use Items
+    if (verb === "use" || verb === "give") {
+        if (state.inv.includes(noun)) {
+            const interact = room.interactions?.[noun];
+            if (interact) {
+                print(interact.msg);
+                if (interact.get) state.inv.push(interact.get);
+                if (interact.flag) state.flags[interact.flag] = true;
+                state.score += 10;
+                state.inv = state.inv.filter(i => i !== noun); // Consume item
+                updateHUD();
+            } else {
+                print("Nothing happened.");
+            }
+        } else {
+            print(`You don't have a ${noun}.`, "error-text");
+        }
+        return;
+    }
+
+    // Inventory
+    if (verb === "inv" || verb === "inventory") {
+        print(`Carrying: ${state.inv.length ? state.inv.join(", ") : "Nothing"}`);
+        return;
+    }
+
+    print(`I don't know how to '${verb}'. Type 'HELP' for assistance.`, "error-text");
 }
 
 inputField.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && state.gameStarted) {
-        handle(inputField.value);
+    if (e.key === 'Enter') {
+        parseCommand(inputField.value);
         inputField.value = '';
     }
 });
+
+// Start
+render();
+print("<b>AETHELGARD ONLINE.</b> Type 'TALK TO ELDER' to begin.", "system-msg");
 </script>
 </body>
 </html>
